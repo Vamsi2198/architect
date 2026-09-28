@@ -12,13 +12,19 @@ module.exports = async (req, res) => {
   const sbUrl = process.env.SUPABASE_URL;
   const sbKey = process.env.SUPABASE_ANON_KEY;
   if (!sbUrl || !sbKey) return res.status(503).json({ error: 'Server is not configured' });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Drafting is not configured on this server' });
 
   // 1. Check the caller is signed in (asks Supabase who owns this token).
+  //    ALLOW_ANONYMOUS_DRAFT=true is a local-development escape hatch only:
+  //    it skips auth AND the credit cap. Never set it on a public deployment.
+  const allowAnon = process.env.ALLOW_ANONYMOUS_DRAFT === 'true';
   const token = (req.headers.authorization || '').replace('Bearer ', '');
-  const who = await fetch(`${sbUrl}/auth/v1/user`, {
-    headers: { apikey: sbKey, Authorization: `Bearer ${token}` }
-  });
-  if (!who.ok) return res.status(401).json({ error: 'Sign in first' });
+  if (!allowAnon || token) {
+    const who = await fetch(`${sbUrl}/auth/v1/user`, {
+      headers: { apikey: sbKey, Authorization: `Bearer ${token}` }
+    });
+    if (!who.ok) return res.status(401).json({ error: 'Sign in first' });
+  }
 
   // 2. Build the prompt here, so the endpoint can't be used for anything else.
   const body = req.body || {};
@@ -27,18 +33,21 @@ module.exports = async (req, res) => {
   if (!description) return res.status(400).json({ error: 'Describe the app first' });
 
   // 3. Spend one credit (atomically checks the monthly cap in Postgres).
-  const cap = Math.max(1, parseInt(process.env.CREDIT_CAP_MONTHLY || '100', 10));
-  const credit = await fetch(`${sbUrl}/rest/v1/rpc/use_credit`, {
-    method: 'POST',
-    headers: { apikey: sbKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_cap: cap })
-  });
-  if (!credit.ok) {
-    console.error('use_credit failed:', credit.status);
-    return res.status(500).json({ error: 'Could not check usage' });
-  }
-  if (!(await credit.json())) {
-    return res.status(429).json({ error: `Monthly credit cap reached (${cap}). It resets on the 1st.` });
+  //    Anonymous local calls skip the cap along with auth.
+  if (!allowAnon || token) {
+    const cap = Math.max(1, parseInt(process.env.CREDIT_CAP_MONTHLY || '100', 10));
+    const credit = await fetch(`${sbUrl}/rest/v1/rpc/use_credit`, {
+      method: 'POST',
+      headers: { apikey: sbKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_cap: cap })
+    });
+    if (!credit.ok) {
+      console.error('use_credit failed:', credit.status);
+      return res.status(500).json({ error: 'Could not check usage' });
+    }
+    if (!(await credit.json())) {
+      return res.status(429).json({ error: `Monthly credit cap reached (${cap}). It resets on the 1st.` });
+    }
   }
 
   // 4. Call Claude, with a timeout so a hung request can't pin the function.

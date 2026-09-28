@@ -70,7 +70,6 @@ function tour(){return `<div class="solo"><div class="solo-inner">
   <button class="role" data-a="startRole" data-v="build"><h3>I'm building it</h3><span class="who">Developers and solution engineers</span><span class="small">Import a repo or connect Claude Code, Cursor, or Codex, then test and ship agents.</span><span class="starts">Starts on an existing project</span></button>
   <button class="role" data-a="startRole" data-v="approve"><h3>I'm approving it</h3><span class="who">Client sponsors and delivery leads</span><span class="small">Review what's about to ship, leave comments, and sign off on production.</span><span class="starts">Starts on approvals</span></button>
  </div>
- <p class="small muted" style="margin-top:22px">Or <a href="#" data-a="go" data-v="signin" style="color:var(--ink);font-weight:600">start from sign-in</a> to see the full flow.</p>
 </div></div>`}
 function signin(){return `<div class="solo"><div class="solo-inner signin">
  <div class="mark">${MARK} Architect</div>
@@ -391,10 +390,13 @@ async function draftJSON(text){
  const fw=S.framework.toLowerCase().replace(/\s+/g,'_');
  const sample=await getSample();
  if(sample)return sample.json(blueprintPrompt(text,fw),{modelTier:'quick'});
- if(DB.on&&DB.user){
-  const {data}=await DB.sb.auth.getSession();
-  const r=await fetch('/api/draft',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({description:text,framework:fw})});
+ if(DB.on){
+  const h={'Content-Type':'application/json'};
+  if(DB.user){const {data}=await DB.sb.auth.getSession();if(data.session)h.Authorization='Bearer '+data.session.access_token}
+  const r=await fetch('/api/draft',{method:'POST',headers:h,body:JSON.stringify({description:text,framework:fw})});
   if(r.ok)return r.json();
+  const j=await r.json().catch(()=>null);
+  toast(j&&j.error?j.error:'Blueprint drafting failed');
  }
  return null;
 }
@@ -483,7 +485,7 @@ function sync(){
 function act(a,v){
  switch(a){
  case 'go':if(v==='signin'||v==='pick'||v==='tour'){S.view=v;render();window.scrollTo(0,0)}else go(v);break;
- case 'startRole':if(DB.on&&!DB.user){try{localStorage.setItem('pendingRole',v)}catch(e){}S.view='signin';render();return}S.role=v;S.client='acme';if(v==='define'){S.dial='plain';go('home')}else if(v==='build'){S.dial='code';S.stage='test';go('project')}else{S.approval='requested';go('approvals')}break;
+ case 'startRole':S.role=v;S.client='acme';if(v==='define'){S.dial='plain';go('home')}else if(v==='build'){S.dial='code';S.stage='test';go('project')}else{S.approval='requested';go('approvals')}break;
  case 'signedIn':
   if(DB.on){if(v==='google')DB.sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}});else toast('Google and email sign-in are live. This option is shown for the design.');return}
   S.view='pick';render();break;
