@@ -1,19 +1,28 @@
-// Local dev server: serves the static files and runs /api/* exactly like
-// Vercel does, loading variables from .env. Not used in production.
+// Web server for Architect: serves the static files and runs the /api/*
+// handlers. Works locally (reads .env) and on Render (env vars from dashboard,
+// PORT provided by the platform). Also works on Vercel as a single function.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Load .env (no dependency — simple KEY=VALUE parser)
-for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split(/\r?\n/)) {
-  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-}
+// Load .env locally, if present (Render injects env vars instead)
+try {
+  for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+} catch (e) { /* no .env — rely on environment */ }
 
 const config = require('./api/config.js');
 const draft = require('./api/draft.js');
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+};
 
 function shim(res) {
   res.status = c => { res.statusCode = c; return res; };
@@ -26,7 +35,8 @@ function shim(res) {
   return res;
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   const url = req.url.split('?')[0];
   if (url === '/api/config' && req.method === 'GET') return config(req, shim(res));
   if (url === '/api/draft' && req.method === 'POST') {
@@ -41,4 +51,7 @@ http.createServer((req, res) => {
   }
   res.setHeader('Content-Type', MIME[path.extname(file)] || 'application/octet-stream');
   fs.createReadStream(file).pipe(res);
-}).listen(3000, () => console.log('Architect dev server: http://localhost:3000'));
+});
+
+const port = process.env.PORT || 3000;
+server.listen(port, () => console.log(`Architect: http://localhost:${port}`));

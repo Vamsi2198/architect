@@ -2,5 +2,9 @@
   "name": "architect-2",
   "private": true,
   "description": "Architect 2.0 prototype: one HTML page, two serverless functions, Supabase for auth and data.",
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node dev-server.js",
+    "dev": "node dev-server.js"
+  }
 }
