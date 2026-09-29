@@ -164,7 +164,7 @@ function home(){
    <div class="item click" data-a="openStage" data-v="preview"><span class="small">Priya left a comment on the claims inbox</span><span class="dot draft"></span></div>
    ${permsOk()?'':`<div class="item click" data-a="openStage" data-v="test"><span class="small">1 agent permission needs review</span><span class="dot warn"></span></div>`}
   </div></div>
- </div>`}
+ </div>${deployedList()}`}
 
 /* ---------- project ---------- */
 function stageDot(k){
@@ -304,6 +304,11 @@ function deploy(){
  ${S.live.staging||S.live.production?`<div class="sheet" style="padding:14px;margin-top:12px">${S.live.staging?`<div class="row between small"><span>Staging</span><a href="${esc(S.appUrls.staging||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--draft)">${esc(S.appUrls.staging||'')}</a></div>`:''}${S.live.production?`<div class="row between small" style="margin-top:6px"><span>Production</span><a href="${esc(S.appUrls.production||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--pass)">${esc(S.appUrls.production||'')}</a></div>`:''}</div>`:''}</div></div>`}
 
 /* ---------- other pages ---------- */
+function deployedList(){
+ const rows=S.deployments.filter(d=>d.url);
+ if(!rows.length)return '';
+ return `<h3 style="margin:26px 0 10px">Deployed apps</h3><div class="list">${rows.map(d=>`<div class="item click" data-a="openApp" data-v="${esc(d.url)}"><div class="row"><span class="dot pass"></span><div><div style="font-weight:600">${esc(d.project)}</div><div class="small muted">${esc(d.env)} · ${esc(d.when)}</div></div></div><span class="chip pass">Live · open</span></div>`).join('')}</div>`;
+}
 function approvals(){
  return `<h1>Approvals</h1><p class="muted" style="margin-top:6px">Releases that need a person to say yes before they reach real users.</p>
  <div class="list" style="margin-top:20px">
@@ -539,6 +544,7 @@ function act(a,v){
  case 'sug':S.prompt=v==='Claims triage agent'?'A claims triage agent that reads the claims inbox, checks each policy, and routes the claim to the right adjuster':v;render.keep=true;render();break;
  case 'draft':draft();break;
  case 'openProject':S.stage='blueprint';go('project');break;
+ case 'openApp':window.open(v,'_blank','noopener');break;
  case 'openStage':S.stage=v;go('project');break;
  case 'stage':S.stage=v;S.view='project';render.keep=true;render();break;
  case 'dial':S.dial=v;render.keep=true;render();break;
@@ -572,7 +578,7 @@ function act(a,v){
   if(S.env==='production'&&!(allPass()&&permsOk()&&S.approval==='approved')){toast('Production is locked until the three checks pass');return}
   S.deploying=true;S.log=['Generating app from blueprint…'];render.keep=true;render();
   (async()=>{const env=S.env;const j=await api('/api/publish',{name:S.project,env,blueprint:S.lanes,framework:S.framework,project_id:DB.projectId});
-   if(j&&j.url){S.log=j.log||[];S.live[env]=true;S.appUrls[env]=j.url;S.deployments.unshift({project:S.project,env:env==='production'?'Production':'Staging',when:'Just now'});S.deploying=false;render.keep=true;render();toast(`Deployed to ${env}`)}
+   if(j&&j.url){S.log=j.log||[];S.live[env]=true;S.appUrls[env]=j.url;S.deployments.unshift({project:S.project,env:env==='production'?'Production':'Staging',when:'Just now',url:j.url});S.deploying=false;render.keep=true;render();toast(`Deployed to ${env}`)}
    else{S.deploying=false;S.log=['Deploy failed',(j&&j.error)||'unknown error'];render.keep=true;render()}})();break}
  case 'scanRepo':{const el=document.getElementById('repo');const repo=(el&&el.value.trim()||'').replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'');if(!repo){el&&el.focus();toast('Enter a repo like owner/name');return}S.imp={step:2,repo,scan:[],stack:null,blueprint:null,error:null};render();(async()=>{const j=await api('/api/import',{repo});if(j&&j.blueprint){S.imp.stack=j.stack;S.imp.blueprint=j.blueprint;S.imp.step=3}else{S.imp.step=1;S.imp.error=(j&&j.error)||'Import failed'}render()})();break}
  case 'impReset':S.imp={step:1,repo:null,scan:[],stack:null,blueprint:null,error:null};render();break;
