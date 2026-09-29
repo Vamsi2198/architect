@@ -44,7 +44,7 @@ const seedPerms=()=>[
 let S={view:'tour',role:'build',client:'acme',notes:false,nav:false,dial:'plain',stage:'blueprint',sel:null,
  lanes:seedLanes(),revealed:99,drafting:false,changes:[],tests:seedTests(),open:3,perms:seedPerms(),
  approval:'none',env:'staging',deploying:false,log:[],live:{staging:false,production:false},credits:{used:0,cap:100},
- imp:{step:1,repo:null,scan:[],stack:null,blueprint:null,error:null},conn:{tool:'claude',state:'waiting',feed:[],tools:[]},appUrls:{staging:'',production:''},deployments:[{project:'Adjuster dashboard',env:'Production',when:'6 days ago'},{project:'Policy Q&A bot',env:'Staging',when:'Yesterday'}],
+ imp:{step:1,repo:null,scan:[],stack:null,blueprint:null,error:null},conn:{tool:'claude',state:'waiting',feed:[],tools:[]},appUrls:{staging:'',production:''},deployments:[],
  pv:{device:'desktop',comment:false,pins:[]},comments:[{who:'Priya S',role:'Client lead',text:'Can we show the policy limit next to the claim amount?',on:'CLM-2041'}],
  project:'Claims triage agent',framework:'LangGraph',prompt:'',drawn:new Map(),drawnInit:false};
 const app=document.getElementById('app');
@@ -99,7 +99,7 @@ function pick(){return `<div class="solo"><div class="solo-inner" style="max-wid
 
 /* ---------- shell ---------- */
 function shell(inner,crumb){
- const c=CLIENTS[S.client];const nApp=(S.approval==='requested'?1:0)+1;
+ const c=CLIENTS[S.client];const nApp=S.approval==='requested'?1:0;
  const nav=(v,label,extra='')=>`<a class="${S.view===v?'on':''}" data-a="go" data-v="${v}"><span>${label}</span>${extra}</a>`;
  return `<div class="app ${S.notes?'notes-on':''}">
  <div class="scrim ${S.nav?'open':''}" data-a="nav"></div>
@@ -108,13 +108,11 @@ function shell(inner,crumb){
   <button class="ws" data-a="go" data-v="pick"><span class="av">${c.ab}</span><span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:14px">${c.name}</span><span class="tiny muted">Switch client</span></span></button>
   <nav class="nav">
    ${nav('home','Home')}
-   ${nav('approvals','Approvals',`<span class="chip ${nApp>1?'warn':''}">${nApp}</span>`)}
+   ${nav('approvals','Approvals',nApp?`<span class="chip warn">${nApp}</span>`:'')}
    ${nav('deploys','Deployments')}
    ${nav('settings','Settings')}
    <div class="nav-h">Projects</div>
    <a class="${S.view==='project'?'on':''}" data-a="openProject"><span>${esc(S.project)}</span><span class="dot ${allPass()?'pass':'fail'}"></span></a>
-   <a data-a="toast" data-v="Opens Policy Q&A bot (prototype)"><span>Policy Q&amp;A bot</span><span class="dot warn"></span></a>
-   <a data-a="toast" data-v="Opens Adjuster dashboard (prototype)"><span>Adjuster dashboard</span><span class="dot pass"></span></a>
    <div class="nav-h">Start something</div>
    ${nav('import','Import a repo')}
    ${nav('connect','Connect a coding agent')}
@@ -156,12 +154,11 @@ function home(){
  </div>
  <div class="home-grid">
   <div><h3 style="margin-bottom:10px">Projects</h3><div class="list">
-   <div class="item click" data-a="openProject"><div><div style="font-weight:600">${esc(S.project)}</div><div class="small muted">${S.framework}, edited 2 hours ago</div></div><span class="chip ${allPass()?'pass':'fail'}">${passCount()} of ${S.tests.length} tests</span></div>
-   <div class="item"><div><div style="font-weight:600">Policy Q&amp;A bot</div><div class="small muted">CrewAI, edited yesterday</div></div><span class="chip warn">Awaiting approval</span></div>
-   <div class="item"><div><div style="font-weight:600">Adjuster dashboard</div><div class="small muted">No agents, edited last week</div></div><span class="chip pass">Live</span></div></div></div>
+   <div class="item click" data-a="openProject"><div><div style="font-weight:600">${esc(S.project)}</div><div class="small muted">${S.framework}, this session</div></div><span class="chip ${allPass()?(S.live.production?'pass':'draft'):'fail'}">${S.live.production?'Live':`${passCount()} of ${S.tests.length} tests`}</span></div>
+  </div><button class="btn sm" style="margin-top:12px" data-a="go" data-v="home">Start a new project</button></div>
   <div><h3 style="margin-bottom:10px">Waiting on you</h3><div class="list">
    ${allPass()?'':`<div class="item click" data-a="openStage" data-v="test"><span class="small">${S.tests.length-passCount()} failing tests on ${esc(S.project)}</span><span class="dot fail"></span></div>`}
-   <div class="item click" data-a="openStage" data-v="preview"><span class="small">Priya left a comment on the claims inbox</span><span class="dot draft"></span></div>
+   <div class="item click" data-a="openStage" data-v="preview"><span class="small">${esc(S.comments.length?`${S.comments[S.comments.length-1].who} left a comment on the preview`:'Preview is ready for comments')}</span><span class="dot ${S.comments.length?'draft':''}"></span></div>
    ${permsOk()?'':`<div class="item click" data-a="openStage" data-v="test"><span class="small">1 agent permission needs review</span><span class="dot warn"></span></div>`}
   </div></div>
  </div>${deployedList()}`}
@@ -312,9 +309,7 @@ function deployedList(){
 function approvals(){
  return `<h1>Approvals</h1><p class="muted" style="margin-top:6px">Releases that need a person to say yes before they reach real users.</p>
  <div class="list" style="margin-top:20px">
-  <div class="item click" data-a="openStage" data-v="approve"><div><div style="font-weight:600">${esc(S.project)}, production release</div><div class="small muted">${S.approval==='requested'?'Requested by Dinesh, waiting on Priya S':S.approval==='approved'?'Approved by Priya S':'Not requested yet'}</div></div><span class="chip ${S.approval==='approved'?'pass':S.approval==='requested'?'warn':''}">${S.approval==='approved'?'Approved':S.approval==='requested'?'Waiting':'Draft'}</span></div>
-  <div class="item"><div><div style="font-weight:600">Policy Q&amp;A bot, production release</div><div class="small muted">Requested by Arjun K, waiting on Priya S</div></div><span class="chip warn">Waiting</span></div>
-  <div class="item"><div><div style="font-weight:600">Adjuster dashboard, v1.3</div><div class="small muted">Approved by Priya S last week</div></div><span class="chip pass">Approved</span></div>
+  <div class="item click" data-a="openStage" data-v="approve"><div><div style="font-weight:600">${esc(S.project)}, production release</div><div class="small muted">${S.approval==='requested'?'Requested, waiting on Priya S':S.approval==='approved'?'Approved by Priya S':S.approval==='changes'?'Changes requested by Priya S':'Not requested yet'}</div></div><span class="chip ${S.approval==='approved'?'pass':S.approval==='requested'?'warn':''}">${S.approval==='approved'?'Approved':S.approval==='requested'?'Waiting':S.approval==='changes'?'Changes':'Draft'}</span></div>
  </div>`}
 function deploys(){
  return `<h1>Deployments</h1><p class="muted" style="margin-top:6px">Everything generated and running for ${CLIENTS[S.client].name}, and where.</p>
