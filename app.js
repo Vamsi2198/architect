@@ -35,19 +35,14 @@ const seedTests=()=>[
  {id:8,name:'Doesn’t route to an adjuster on leave',s:'pass'},
  {id:9,name:'Flags duplicate claims on one policy',s:'pass'}
 ];
-const seedPerms=()=>[
- {tool:'read_email',what:'Read the claims mailbox',access:'Read only',ok:true},
- {tool:'policy_lookup',what:'Look up a policy',access:'Read only',ok:true},
- {tool:'route_claim',what:'Assign a claim to an adjuster',access:'Writes to Claims',ok:true},
- {tool:'reply_email',what:'Reply to the claimant',access:'Sends email',ok:false}
-];
 let S={view:'tour',role:'build',client:'acme',notes:false,nav:false,dial:'plain',stage:'blueprint',sel:null,
- lanes:seedLanes(),revealed:99,drafting:false,changes:[],tests:seedTests(),open:3,perms:seedPerms(),
+ lanes:seedLanes(),revealed:99,drafting:false,changes:[],tests:seedTests(),open:3,perms:[],
  approval:'none',env:'staging',deploying:false,log:[],live:{staging:false,production:false},credits:{used:0,cap:100},
  imp:{step:1,repo:null,scan:[],stack:null,blueprint:null,error:null},conn:{tool:'claude',state:'waiting',feed:[],tools:[]},appUrls:{staging:'',production:''},deployments:[],
  pv:{device:'desktop',comment:false,pins:[]},comments:[{who:'Priya S',role:'Client lead',text:'Can we show the policy limit next to the claim amount?',on:'CLM-2041'}],
  project:'Claims triage agent',framework:'LangGraph',prompt:'',drawn:new Map(),drawnInit:false};
 const app=document.getElementById('app');
+S.perms=permsFromBlueprint();
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('show'),2600)}
 const passCount=()=>S.tests.filter(t=>t.s==='pass').length;
@@ -167,7 +162,7 @@ function home(){
 function stageDot(k){
  if(k==='blueprint')return S.changes.some(c=>c.status==='pending')?'draft':'pass';
  if(k==='preview')return S.comments.length?'draft':'';
- if(k==='test')return allPass()&&permsOk()?'pass':'fail';
+ if(k==='test')return S.tests.some(t=>t.s==='idle'||t.s==='running')?'draft':allPass()&&permsOk()?'pass':'fail';
  if(k==='approve')return S.approval==='approved'?'pass':S.approval==='requested'?'warn':'';
  if(k==='deploy')return S.live.production?'pass':S.live.staging?'draft':'';
 }
@@ -239,17 +234,39 @@ function blueprint(){
  <div class="cmd">${changes}
   <div class="cmd-bar" style="margin-top:10px"><input id="cmd" placeholder="${S.sel&&sel?`Change ${esc(sel.title).toLowerCase()}…`:'Tell Architect what to change, like “post to Slack when a claim is escalated”'}" aria-label="Describe a change"><span class="tiny muted hide-sm">~8 credits</span><button class="btn ink sm" data-a="send" aria-label="Send">${I.send}</button></div>
  </div>`}
+function mockVal(name){
+ if(/amount|price|cost|total|salary|balance/i.test(name))return '₹42,000';
+ if(/status|state/i.test(name))return 'New';
+ if(/email|mail/i.test(name))return 'user@acme.in';
+ if(/done|complete|active|paid/i.test(name))return 'Yes';
+ if(/count|qty|number/i.test(name))return '12';
+ if(/id/i.test(name))return 'ID-1042';
+ if(/name|title|vendor|task|label|item|desc/i.test(name))return 'Alpha entry';
+ if(/date|due|when|created|updated/i.test(name)||/(^|_)at$/i.test(name))return '2025-03-14';
+ return 'sample';
+}
+function tableRows(code){
+ const m=String(code||'').match(/\(([^)]*)\)/);if(!m)return[];
+ const drop=/^(primary|key|not|null|unique|default|references|text|int|serial|uuid|timestamp|varchar|bool|date|numeric)$/i;
+ const cols=m[1].split(',').map(p=>p.trim().replace(/^["'`\s]+|["'`,\s]+$/g,'').split(/\s+/).filter(w=>w&&!drop.test(w))[0]).filter(Boolean);
+ if(!cols.length)return[];
+ return Array.from({length:4},()=>cols.map(mockVal));
+}
 function preview(){
- const claims=[['CLM-2041','Motor, rear-end collision','₹42,000','Adjuster 2','pass'],['CLM-2042','Home, water damage','₹1,80,000','Adjuster 1','pass'],['CLM-2043','Motor, total loss','₹6,00,000','Senior adjuster','warn'],['CLM-2044','Health, cashless request','₹75,000','Needs policy number','fail']];
  const pinsOn=id=>S.pv.pins.filter(p=>p===id).length+S.comments.filter(c=>c.on===id).length;
+ const tables=(S.lanes.find(l=>l.id==='data')||{items:[]}).items;
+ const body=tables.length?tables.map(t=>{
+  const rows=tableRows(t.code);
+  return `<div class="pv-sec"><div class="pv-bar"><b>${esc(t.title)}</b><span class="tiny muted">${rows.length} rows</span></div>${rows.map((r,i)=>{const id=`${t.title} #${i+1}`;const pin=pinsOn(id);return `<div class="claim" data-a="${S.pv.comment?'pin':''}" data-v="${esc(id)}">${pin?`<span class="pin">${pin}</span>`:''}<div class="tiny mono muted" style="flex:1;padding-right:${pin?'22px':'0'}">${r.map(v=>`<span style="margin-right:14px">${esc(v)}</span>`).join('')}</div></div>`}).join('')}</div>`}).join('')
+  :`<div class="tiny muted" style="padding:24px;text-align:center">Add data tables to the blueprint to see rows here.</div>`;
  return `<div class="row between" style="flex-wrap:wrap;margin-bottom:14px">
   <div class="tabs" style="margin:0"><button class="btn sm ${S.pv.device==='desktop'?'on':''}" data-a="dev" data-v="desktop">Desktop</button><button class="btn sm ${S.pv.device==='phone'?'on':''}" data-a="dev" data-v="phone">Phone</button></div>
   <div class="row"><button class="btn sm ${S.pv.comment?'ink':''}" data-a="cmode" aria-pressed="${S.pv.comment}">${S.pv.comment?'Click a row to comment':'Comment'}</button><button class="btn sm" data-a="share">Copy review link</button></div>
  </div>
  ${note('Approvers get a link that works without an account. Most client sponsors will never sign up, and they shouldn’t have to.')}
  <div class="pv-grid"><div class="frame"><div class="device ${S.pv.device} ${S.pv.comment?'comment-mode':''}">
-  <div class="app-bar"><b>Acme claims</b><span class="tiny muted">4 new today</span></div>
-  ${claims.map(c=>`<div class="claim" data-a="${S.pv.comment?'pin':''}" data-v="${c[0]}">${pinsOn(c[0])?`<span class="pin">${pinsOn(c[0])}</span>`:''}<div><div style="font-weight:600;font-size:14px">${c[1]}</div><div class="tiny muted mono">${c[0]}</div></div><div style="text-align:right;padding-right:${pinsOn(c[0])?'22px':'0'}"><div style="font-weight:600;font-size:14px">${c[2]}</div><span class="chip ${c[4]}">${c[3]}</span></div></div>`).join('')}
+  <div class="app-bar"><b>${esc(S.project)}</b><span class="tiny muted">preview</span></div>
+  ${body}
  </div></div>
  <aside><h3 style="margin-bottom:8px">Comments</h3>${S.pv.target?`<div class="sheet" style="padding:12px;margin-bottom:12px"><label class="small" for="cin">Comment on <span class="mono">${S.pv.target}</span></label><textarea class="input" id="cin" style="margin-top:6px;min-height:64px"></textarea><p id="cErr" class="small" style="color:var(--fail);margin-top:6px;display:none">Write a comment first.</p><div class="row" style="margin-top:8px"><button class="btn sm ink" data-a="addC">Add comment</button><button class="btn sm" data-a="pin" data-v="">Cancel</button></div></div>`:''}<div class="list">${S.comments.map(c=>`<div class="item" style="align-items:flex-start"><div class="person" style="align-items:flex-start"><span class="pav">${c.who.split(' ').map(x=>x[0]).join('')}</span><div><div class="small"><b>${esc(c.who)}</b> <span class="muted">on ${c.on}</span></div><div class="small">${esc(c.text)}</div></div></div></div>`).join('')}</div>
  <button class="btn sm" style="margin-top:12px" data-a="toBlueprint">Turn comments into changes</button></aside></div>`}
@@ -258,12 +275,12 @@ function test(){
  return `<div class="readiness">
   <div class="sheet stat"><div class="small muted">Scenarios passing</div><div class="v">${p} of ${n}</div><div class="bar"><i style="width:${pct}%"></i></div></div>
   <div class="sheet stat"><div class="small muted">Permissions reviewed</div><div class="v">${S.perms.filter(x=>x.ok).length} of ${S.perms.length}</div></div>
-  <div class="sheet stat"><div class="small muted">Cost per 100 claims</div><div class="v">₹38</div><div class="tiny muted">From the last test run</div></div>
+  <div class="sheet stat"><div class="small muted">Scenarios run</div><div class="v">${S.tests.filter(t=>t.ran).length} of ${S.tests.length}</div><div class="tiny muted">Real executions against this blueprint</div></div>
  </div>
  ${note('Agents fail differently from screens: the demo works and the fortieth user breaks it. Testing sits between building and shipping, and production waits on it.')}
  <div class="test-grid"><div>
   <div class="row between" style="margin-bottom:8px"><h3>Scenarios</h3><button class="btn sm" data-a="rerun">Run all again</button></div>
-  <div class="list">${S.tests.map(t=>`<div class="item click" data-a="openT" data-v="${t.id}" aria-expanded="${S.open===t.id}"><span class="small">${esc(t.name)}</span><span class="chip ${t.s==='pass'?'pass':t.s==='fail'?'fail':'draft'}">${t.s==='pass'?I.check+' Pass':t.s==='fail'?I.x+' Fail':t.s==='fixing'?'Fixing…':'Running…'}</span></div>${S.open===t.id&&t.trace?`<div class="trace">${t.trace.map(l=>`<div class="l ${l[2]?'bad':''}"><span style="min-width:110px">${l[0]}</span><span>${esc(l[1])}</span></div>`).join('')}${t.s==='fail'?`<button class="btn sm ink" style="margin-top:10px" data-a="fix" data-v="${t.id}">Ask Architect to fix this</button>`:t.s==='pass'&&t.fixed?`<div class="tiny" style="color:var(--pass);margin-top:8px">${esc(t.fixed)}</div>`:''}</div>`:''}`).join('')}</div>
+  <div class="list">${S.tests.map(t=>`<div class="item click" data-a="openT" data-v="${t.id}" aria-expanded="${S.open===t.id}"><span class="small">${esc(t.name)}</span><span class="chip ${t.s==='pass'?'pass':t.s==='fail'?'fail':t.s==='idle'?'':'draft'}">${t.s==='pass'?I.check+' Pass':t.s==='fail'?I.x+' Fail':t.s==='fixing'?'Fixing…':'Not run'}</span></div>${S.open===t.id&&t.trace?`<div class="trace">${t.trace.map(l=>`<div class="l ${l[2]?'bad':''}"><span style="min-width:110px">${l[0]}</span><span>${esc(l[1])}</span></div>`).join('')}${t.s==='fail'?`<button class="btn sm ink" style="margin-top:10px" data-a="fix" data-v="${t.id}">Ask Architect to fix this</button>`:t.s==='pass'&&t.fixed?`<div class="tiny" style="color:var(--pass);margin-top:8px">${esc(t.fixed)}</div>`:''}</div>`:''}`).join('')}</div>
   <div class="row" style="margin-top:12px"><input class="input" id="scn" placeholder="Add a scenario, like “a claim sent twice in one hour”"><button class="btn" data-a="addScn">Add</button></div>
   <p id="scnErr" class="small" style="color:var(--fail);margin-top:6px;display:none">Describe the situation you want to test first.</p>
  </div>
@@ -421,6 +438,7 @@ async function draft(){
    }
   }catch(e){}
  }
+ S.perms=permsFromBlueprint();loadScenarios();
  const total=S.lanes.reduce((a,l)=>a+l.items.length,0);
  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const step=()=>{S.revealed++;render.keep=true;render();if(S.revealed<total)setTimeout(step,reduce?60:380);else{S.drafting=false;S.revealed=99;render.keep=true;render();toast('Blueprint drafted. Check it, then open Preview.');sync();loadUsage()}};
@@ -428,16 +446,37 @@ async function draft(){
 }
 
 /* ---------- API helpers (Test, Import, Deploy, Connect screens) ---------- */
-async function api(path, body) {
+async function api(path, body, silent) {
   try {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
     const j = await r.json().catch(() => null);
     if (r.ok) return j;
-    toast(j && j.error ? j.error : 'Request failed');
+    if (!silent) toast(j && j.error ? j.error : 'Request failed');
     return null;
   } catch (e) {
-    toast('Could not reach the server');
+    if (!silent) toast('Could not reach the server');
     return null;
+  }
+}
+// Permissions derived from the blueprint's connections: anything that can
+// write, post, send or delete needs a human review before production.
+function permsFromBlueprint() {
+  const conn = S.lanes.find(l => l.id === 'conn');
+  const out = [];
+  (conn ? conn.items : []).forEach(c => {
+    const writes = /scope\s*=\s*["'](post|write|send|delete)["']/i.test(c.code);
+    out.push({ tool: c.title.toLowerCase().replace(/[^a-z0-9]+/g, '_'), what: c.plain, access: writes ? 'Writes / sends' : 'Read only', ok: !writes });
+  });
+  return out;
+}
+// Ask the server for scenarios written for THIS blueprint; replace the list.
+async function loadScenarios() {
+  const j = await api('/api/scenarios', { blueprint: S.lanes, framework: S.framework }, true);
+  if (j && Array.isArray(j.scenarios) && j.scenarios.length) {
+    S.tests = j.scenarios.slice(0, 8).map((s, i) => ({ id: Date.now() + i, name: String(s).slice(0, 140), s: 'idle' }));
+    S.open = null;
+    render.keep = true;
+    render();
   }
 }
 async function runScenario(t) {
@@ -454,6 +493,7 @@ async function runScenario(t) {
     t.s = 'fail';
     t.trace = [['api', 'the test server did not respond', 1]];
   }
+  t.ran = true;
   render.keep = true;
   render();
 }
@@ -577,7 +617,7 @@ function act(a,v){
    else{S.deploying=false;S.log=['Deploy failed',(j&&j.error)||'unknown error'];render.keep=true;render()}})();break}
  case 'scanRepo':{const el=document.getElementById('repo');const repo=(el&&el.value.trim()||'').replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'');if(!repo){el&&el.focus();toast('Enter a repo like owner/name');return}S.imp={step:2,repo,scan:[],stack:null,blueprint:null,error:null};render();(async()=>{const j=await api('/api/import',{repo});if(j&&j.blueprint){S.imp.stack=j.stack;S.imp.blueprint=j.blueprint;S.imp.step=3}else{S.imp.step=1;S.imp.error=(j&&j.error)||'Import failed'}render()})();break}
  case 'impReset':S.imp={step:1,repo:null,scan:[],stack:null,blueprint:null,error:null};render();break;
- case 'impOpen':{const bp=S.imp.blueprint;if(!bp)break;const kinds={screens:'Screen',agents:'Agent',data:'Table',conn:'Connection'};const seeds=seedLanes();S.lanes=seeds.map(l=>{const g=(bp.lanes||[]).find(x=>x.id===l.id);const items=(g&&Array.isArray(g.items)&&g.items.length)?g.items.slice(0,3).map((it,i)=>({id:l.id+'_'+i,kind:kinds[l.id],title:String(it.title||'Untitled'),plain:String(it.plain||''),code:String(it.code||'')})):l.items;return{...l,items}});autoLinks();if(bp.name)S.project=String(bp.name).slice(0,48);S.framework='Bring your own';S.dial='code';S.stage='blueprint';S.sel=null;S.drawn=new Map();go('project');toast('Imported. Review the blueprint, then test and ship.');break}
+ case 'impOpen':{const bp=S.imp.blueprint;if(!bp)break;const kinds={screens:'Screen',agents:'Agent',data:'Table',conn:'Connection'};const seeds=seedLanes();S.lanes=seeds.map(l=>{const g=(bp.lanes||[]).find(x=>x.id===l.id);const items=(g&&Array.isArray(g.items)&&g.items.length)?g.items.slice(0,3).map((it,i)=>({id:l.id+'_'+i,kind:kinds[l.id],title:String(it.title||'Untitled'),plain:String(it.plain||''),code:String(it.code||'')})):l.items;return{...l,items}});autoLinks();S.perms=permsFromBlueprint();loadScenarios();if(bp.name)S.project=String(bp.name).slice(0,48);S.framework='Bring your own';S.dial='code';S.stage='blueprint';S.sel=null;S.drawn=new Map();go('project');toast('Imported. Review the blueprint, then test and ship.');break}
  case 'ctool':S.conn.tool=v;render.keep=true;render();break;
  case 'copy':toast('Copied');break;
  case 'checkMcp':{S.conn.state='waiting';render.keep=true;render();(async()=>{try{const r=await fetch('/api/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});const j=await r.json();if(j&&j.result&&Array.isArray(j.result.tools)){S.conn.state='connected';S.conn.tools=j.result.tools.map(x=>x.name);S.conn.feed=[['initialize ok — MCP protocol answering','pass'],[`tools/list: ${j.result.tools.length} tools exposed`,'pass']]}else{S.conn.state='waiting';S.conn.feed=[['endpoint did not answer MCP','fail']]}}catch(e){S.conn.state='waiting';S.conn.feed=[['endpoint unreachable','fail']]}render.keep=true;render()})();break}

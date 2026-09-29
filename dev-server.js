@@ -19,6 +19,7 @@ const test = require('./api/test.js');
 const fix = require('./api/fix.js');
 const importer = require('./api/import.js');
 const publish = require('./api/publish.js');
+const scenarios = require('./api/scenarios.js');
 const mcp = require('./api/mcp.js');
 
 const POST_ROUTES = {
@@ -27,6 +28,7 @@ const POST_ROUTES = {
   '/api/fix': fix,
   '/api/import': importer,
   '/api/publish': publish,
+  '/api/scenarios': scenarios,
   '/api/mcp': mcp
 };
 
