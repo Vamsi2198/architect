@@ -166,3 +166,50 @@ end;
 $$;
 
 grant execute on function use_credit(integer) to authenticated;
+
+-- ---------- Test runs (real results from /api/test) ----------
+create table test_runs (
+  id bigint generated always as identity primary key,
+  project_id uuid references projects on delete cascade,
+  scenario text not null,
+  status text not null check (status in ('pass','fail','running')),
+  trace jsonb,
+  fix text,
+  created_at timestamptz default now()
+);
+
+alter table test_runs enable row level security;
+
+create policy "members use test_runs" on test_runs for all
+  using (is_member(project_workspace(project_id))) with check (is_member(project_workspace(project_id)));
+
+-- ---------- Deployments (real, from /api/publish) ----------
+create table deployments (
+  id bigint generated always as identity primary key,
+  project_id uuid references projects on delete cascade,
+  env text not null check (env in ('staging','production')),
+  url text not null,
+  status text not null default 'live',
+  detail text,
+  created_at timestamptz default now()
+);
+
+alter table deployments enable row level security;
+
+create policy "members use deployments" on deployments for all
+  using (is_member(project_workspace(project_id))) with check (is_member(project_workspace(project_id)));
+
+-- ---------- Coding-agent connection events (from /api/mcp calls) ----------
+create table connection_events (
+  id bigint generated always as identity primary key,
+  user_id uuid references auth.users on delete cascade,
+  tool text not null,
+  detail text,
+  ok boolean default true,
+  created_at timestamptz default now()
+);
+
+alter table connection_events enable row level security;
+
+create policy "read my connection events" on connection_events for select
+  using (user_id = auth.uid());

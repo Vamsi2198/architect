@@ -44,7 +44,7 @@ const seedPerms=()=>[
 let S={view:'tour',role:'build',client:'acme',notes:false,nav:false,dial:'plain',stage:'blueprint',sel:null,
  lanes:seedLanes(),revealed:99,drafting:false,changes:[],tests:seedTests(),open:3,perms:seedPerms(),
  approval:'none',env:'staging',deploying:false,log:[],live:{staging:false,production:false},credits:{used:0,cap:100},
- imp:{step:1,repo:null,scan:[]},conn:{tool:'claude',state:'waiting',feed:[]},
+ imp:{step:1,repo:null,scan:[],stack:null,blueprint:null,error:null},conn:{tool:'claude',state:'waiting',feed:[],tools:[]},appUrls:{staging:'',production:''},deployments:[{project:'Adjuster dashboard',env:'Production',when:'6 days ago'},{project:'Policy Q&A bot',env:'Staging',when:'Yesterday'}],
  pv:{device:'desktop',comment:false,pins:[]},comments:[{who:'Priya S',role:'Client lead',text:'Can we show the policy limit next to the claim amount?',on:'CLM-2041'}],
  project:'Claims triage agent',framework:'LangGraph',prompt:'',drawn:new Map(),drawnInit:false};
 const app=document.getElementById('app');
@@ -70,6 +70,7 @@ function tour(){return `<div class="solo"><div class="solo-inner">
   <button class="role" data-a="startRole" data-v="build"><h3>I'm building it</h3><span class="who">Developers and solution engineers</span><span class="small">Import a repo or connect Claude Code, Cursor, or Codex, then test and ship agents.</span><span class="starts">Starts on an existing project</span></button>
   <button class="role" data-a="startRole" data-v="approve"><h3>I'm approving it</h3><span class="who">Client sponsors and delivery leads</span><span class="small">Review what's about to ship, leave comments, and sign off on production.</span><span class="starts">Starts on approvals</span></button>
  </div>
+ <p class="small muted" style="margin-top:22px">Or <a href="#" data-a="go" data-v="signin" style="color:var(--ink);font-weight:600">start from sign-in</a> to save your work to a workspace.</p>
 </div></div>`}
 function signin(){return `<div class="solo"><div class="solo-inner signin">
  <div class="mark">${MARK} Architect</div>
@@ -300,7 +301,7 @@ function deploy(){
   <div class="row" style="margin-top:14px;flex-wrap:wrap"><button class="btn ink" data-a="deployGo">${S.deploying?'Deploying…':blocked?'Production is locked':`Deploy to ${S.env}`}</button><button class="btn" data-a="toast" data-v="Pull request opened on acme-ai/claims-triage (prototype)">Open pull request</button></div>
  </div>
  <div><div class="log" aria-live="polite">${S.log.length?S.log.map(l=>`<div>${esc(l)}</div>`).join(''):'<div style="opacity:.6">Deploy output appears here</div>'}</div>
- ${S.live.staging||S.live.production?`<div class="sheet" style="padding:14px;margin-top:12px">${S.live.staging?`<div class="row between small"><span>Staging</span><a href="#" data-a="toast" data-v="Opens the staging app (prototype)" class="mono" style="color:var(--draft)">claims-triage.staging.acme.architect.app</a></div>`:''}${S.live.production?`<div class="row between small" style="margin-top:6px"><span>Production</span><a href="#" data-a="toast" data-v="Opens the live app (prototype)" class="mono" style="color:var(--pass)">claims.acme.in</a></div>`:''}</div>`:''}</div></div>`}
+ ${S.live.staging||S.live.production?`<div class="sheet" style="padding:14px;margin-top:12px">${S.live.staging?`<div class="row between small"><span>Staging</span><a href="${esc(S.appUrls.staging||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--draft)">${esc(S.appUrls.staging||'')}</a></div>`:''}${S.live.production?`<div class="row between small" style="margin-top:6px"><span>Production</span><a href="${esc(S.appUrls.production||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--pass)">${esc(S.appUrls.production||'')}</a></div>`:''}</div>`:''}</div></div>`}
 
 /* ---------- other pages ---------- */
 function approvals(){
@@ -311,9 +312,8 @@ function approvals(){
   <div class="item"><div><div style="font-weight:600">Adjuster dashboard, v1.3</div><div class="small muted">Approved by Priya S last week</div></div><span class="chip pass">Approved</span></div>
  </div>`}
 function deploys(){
- const rows=[[S.project,S.live.production?'Production':S.live.staging?'Staging':'Not deployed',S.live.production||S.live.staging?'Just now':'',S.live.production?'pass':S.live.staging?'draft':''],['Adjuster dashboard','Production','6 days ago','pass'],['Policy Q&A bot','Staging','Yesterday','draft']];
- return `<h1>Deployments</h1><p class="muted" style="margin-top:6px">Everything running for ${CLIENTS[S.client].name}, and where.</p>
- <div class="list" style="margin-top:20px">${rows.map(r=>`<div class="item"><div><div style="font-weight:600">${esc(r[0])}</div><div class="small muted">${r[2]||'No deploys yet'}</div></div><span class="chip ${r[3]}">${r[1]}</span></div>`).join('')}</div>`}
+ return `<h1>Deployments</h1><p class="muted" style="margin-top:6px">Everything generated and running for ${CLIENTS[S.client].name}, and where.</p>
+ <div class="list" style="margin-top:20px">${S.deployments.map(d=>`<div class="item"><div><div style="font-weight:600">${esc(d.project)}</div><div class="small muted">${esc(d.when)}</div></div><span class="chip ${d.env==='Production'?'pass':'draft'}">${esc(d.env)}</span></div>`).join('')}</div>`}
 function settings(){
  const ppl=[['Dinesh','DM','Building'],['Priya S','PS','Approving'],['Arjun K','AK','Building'],['Meera R','MR','Defining']];
  return `<h1>Settings for ${CLIENTS[S.client].name}</h1>
@@ -331,33 +331,38 @@ function settings(){
   <div class="item"><span class="small">Monthly credit cap for this client</span><span class="small mono">3,000</span></div></div></div></div>`}
 function importView(){
  const st=S.imp.step;
- const repos=['acme-ai/claims-portal','acme-ai/policy-service','acme-ai/adjuster-tools'];
  let body='';
- if(st===1)body=`<h3 style="margin:18px 0 8px">Pick a repository</h3><div class="list">${repos.map(r=>`<div class="item click" data-a="pickRepo" data-v="${r}"><span class="row small mono">${I.git} ${r}</span><span class="small muted">Import</span></div>`).join('')}</div><p class="small muted" style="margin-top:12px">Or upload a zip, or paste a public GitHub URL.</p>`;
- if(st===2)body=`<div class="log" style="margin-top:18px">${S.imp.scan.map(l=>`<div>${esc(l)}</div>`).join('')}<div class="pulse">…</div></div>`;
- if(st===3)body=`<h3 style="margin:18px 0 10px">Here's what we found in <span class="mono">${S.imp.repo}</span></h3>
- <div class="map">
-  <div class="sheet m"><div class="small muted">Frontend</div><div style="font-weight:600">Next.js 14</div><div class="tiny muted">app/ with 11 routes</div></div>
-  <div class="sheet m"><div class="small muted">Backend</div><div style="font-weight:600">FastAPI</div><div class="tiny muted">api/ with 6 endpoints</div></div>
-  <div class="sheet m"><div class="small muted">Agents found</div><div style="font-weight:600">2, on CrewAI</div><div class="tiny muted">agents/intake.py, agents/fraud.py</div></div>
- </div>
- <div class="two" style="margin-top:16px"><div class="sheet" style="padding:16px"><h3>Architect can take over</h3><div class="small stack" style="margin-top:10px"><div>${I.check} Hosting and running both agents</div><div>${I.check} Writing test scenarios from your existing tests</div><div>${I.check} Deploys to staging and production</div></div></div>
- <div class="sheet" style="padding:16px"><h3>We'll leave alone</h3><div class="small stack" style="margin-top:10px"><div>Your frontend code and styling</div><div>Your CI in .github/workflows</div><div>Anything you mark as read only</div></div></div></div>
- <div class="row" style="margin-top:16px"><button class="btn ink" data-a="impOpen">Open in Architect</button><button class="btn" data-a="impReset">Pick another repo</button></div>`;
+ if(st===1)body=`<h3 style="margin:18px 0 8px">Import a public GitHub repository</h3>
+  <div class="row" style="margin-top:10px;max-width:560px"><input class="input" id="repo" placeholder="owner/repo or https://github.com/owner/repo" value="${esc(S.imp.repo||'')}"><button class="btn ink" data-a="scanRepo">Scan</button></div>
+  <p class="small" style="margin-top:12px">${S.imp.error?`<span style="color:var(--fail)">${esc(S.imp.error)}</span>`:'<span class="muted">We read the repo\'s file tree and manifests, then map it to a blueprint. Nothing in the repo is changed.</span>'}</p>
+  <p class="tiny muted" style="margin-top:8px">Try <span class="mono">pallets/flask</span> or your own public repo. Set a GITHUB_TOKEN env var on the server for private repos.</p>`;
+ if(st===2)body=`<div class="log" style="margin-top:18px"><div>Resolving ${esc(S.imp.repo)}…</div><div class="pulse">reading file tree and manifests…</div></div>`;
+ if(st===3){const s=S.imp.stack||{};const bp=S.imp.blueprint||{};const parts=(bp.lanes||[]).reduce((a,l)=>a+(l.items?l.items.length:0),0);
+  body=`<h3 style="margin:18px 0 10px">Here's what we found in <span class="mono">${esc(s.repo||S.imp.repo)}</span></h3>
+  <div class="map">
+   <div class="sheet m"><div class="small muted">Files</div><div style="font-weight:600">${s.files??'—'}</div><div class="tiny muted">${s.js||0} JS/TS · ${s.python||0} Python</div></div>
+   <div class="sheet m"><div class="small muted">Manifests</div><div style="font-weight:600">${(s.manifests||[]).length} found</div><div class="tiny muted">${esc((s.manifests||[]).map(m=>m.split('/').pop()).join(', ')||'none')}</div></div>
+   <div class="sheet m"><div class="small muted">Agent-like files</div><div style="font-weight:600">${(s.agentFiles||[]).length}</div><div class="tiny muted" style="overflow:hidden;text-overflow:ellipsis">${esc((s.agentFiles||[]).slice(0,2).join(', ')||'none detected')}</div></div>
+  </div>
+  ${bp.name?`<p class="small" style="margin-top:14px">Mapped to blueprint <b>${esc(bp.name)}</b> — ${parts} parts detected.</p>`:`<p class="small muted" style="margin-top:14px">No app structure detected in this repo.</p>`}
+  <div class="row" style="margin-top:16px">${bp.name?`<button class="btn ink" data-a="impOpen">Open in Architect</button>`:''}<button class="btn" data-a="impReset">Scan another repo</button></div>`}
  return `<h1>Import a repo</h1><p class="muted" style="margin-top:6px">We read the project first and show you what we understood before changing a line.</p>${note('A developer decides in the first minute whether a tool understood their code. The map is that proof.')}${body}`}
 function connectView(){
  const tools={claude:'Claude Code',cursor:'Cursor',codex:'Codex'};
  const t=S.conn.tool;
- return `<h1>Connect a coding agent</h1><p class="muted" style="margin-top:6px">Keep writing code where you already do. Architect handles agent hosting, tests, secrets, and deploys.</p>
+ const mcpUrl=location.origin+'/api/mcp';
+ return `<h1>Connect a coding agent</h1><p class="muted" style="margin-top:6px">Keep writing code where you already do. Architect exposes a real MCP endpoint: agents can read the blueprint, run scenarios, and publish apps.</p>
  ${note('We don’t try to replace Claude Code or Cursor. For developers, Architect is where their work gets tested and shipped.')}
  <div class="tabs" style="margin-top:18px">${Object.entries(tools).map(([k,v])=>`<button class="btn sm ${t===k?'on':''}" data-a="ctool" data-v="${k}">${v}</button>`).join('')}</div>
  <div class="two"><div class="stack">
-  <div class="small">1. Sign in from your terminal</div><div class="codebox"><pre>npx @architect/cli login --workspace acme</pre><button class="btn sm" data-a="copy">Copy</button></div>
-  <div class="small">2. Add Architect as an MCP server in ${tools[t]}</div><div class="codebox"><pre>${esc(`{\n  "mcpServers": {\n    "architect": {\n      "url": "https://mcp.architect.new/acme"\n    }\n  }\n}`)}</pre><button class="btn sm" data-a="copy">Copy</button></div>
-  <div class="small muted">Then ask ${tools[t]} things like “deploy this to Architect staging” or “run the Architect scenarios for the triage agent”.</div>
+  <div class="small">1. Add Architect as an MCP server in ${tools[t]}</div><div class="codebox"><pre>${esc(`{\n  "mcpServers": {\n    "architect": {\n      "url": "${mcpUrl}"\n    }\n  }\n}`)}</pre><button class="btn sm" data-a="copy">Copy</button></div>
+  <div class="small">2. Tools exposed by this endpoint</div><div>${S.conn.tools.length?S.conn.tools.map(x=>`<span class="chip" style="margin:0 6px 6px 0">${esc(x)}</span>`).join(''):'<span class="small muted">Press “Test connection” to discover them.</span>'}</div>
+  <div class="small muted">Then ask ${tools[t]} things like “run the Architect scenario <i>escalates a large claim</i>” or “publish this app to Architect”.</div>
  </div>
- <div class="sheet" style="padding:16px"><div class="row between"><h3>Connection</h3><span class="chip ${S.conn.state==='connected'?'pass':'warn'}">${S.conn.state==='connected'?'Connected':'Waiting for your agent'}</span></div>
-  ${S.conn.state==='connected'?`<div class="feed" style="margin-top:10px">${S.conn.feed.map(f=>`<div><span class="dot ${f[1]}"></span>${esc(f[0])}</div>`).join('')}</div><button class="btn sm" style="margin-top:12px" data-a="openStage" data-v="test">See test results</button>`:`<p class="small muted" style="margin-top:8px">This updates on its own once the CLI signs in.</p><button class="btn sm" style="margin-top:12px" data-a="simConn">Simulate a connection</button>`}
+ <div class="sheet" style="padding:16px"><div class="row between"><h3>Endpoint</h3><span class="chip ${S.conn.state==='connected'?'pass':'warn'}">${S.conn.state==='connected'?'Responding':'Not checked yet'}</span></div>
+  <p class="small mono" style="margin-top:8px;word-break:break-all">${esc(mcpUrl)}</p>
+  ${S.conn.state==='connected'?`<div class="feed" style="margin-top:10px">${S.conn.feed.map(f=>`<div><span class="dot ${f[1]}"></span>${esc(f[0])}</div>`).join('')}</div>`:`<p class="small muted" style="margin-top:8px">Check that the endpoint answers MCP requests from this deployment.</p>`}
+  <div class="row" style="margin-top:12px"><button class="btn sm ${S.conn.state==='connected'?'':'ink'}" data-a="checkMcp">${S.conn.state==='connected'?'Check again':'Test connection'}</button>${S.conn.state==='connected'?`<button class="btn sm" data-a="openStage" data-v="test">See test results</button>`:''}</div>
  </div></div>`}
 
 /* ---------- render ---------- */
@@ -378,6 +383,7 @@ function render(){
  const cmd=document.getElementById('cmd');if(cmd)cmd.onkeydown=e=>{if(e.key==='Enter')act('send')};
  const pr=document.getElementById('prompt');if(pr)pr.oninput=e=>{S.prompt=e.target.value};
  const scn=document.getElementById('scn');if(scn){scn.onkeydown=e=>{if(e.key==='Enter')act('addScn')};scn.oninput=()=>{document.getElementById('scnErr').style.display='none'}}
+ const rp=document.getElementById('repo');if(rp)rp.onkeydown=e=>{if(e.key==='Enter')act('scanRepo')};
 }
 function go(v){S.view=v;S.nav=false;render();const m=document.querySelector('.main');if(m)m.scrollTop=0;window.scrollTo(0,0)}
 
@@ -421,6 +427,37 @@ async function draft(){
  setTimeout(step,300);
 }
 
+/* ---------- API helpers (Test, Import, Deploy, Connect screens) ---------- */
+async function api(path, body) {
+  try {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => null);
+    if (r.ok) return j;
+    toast(j && j.error ? j.error : 'Request failed');
+    return null;
+  } catch (e) {
+    toast('Could not reach the server');
+    return null;
+  }
+}
+async function runScenario(t) {
+  t.s = 'running';
+  render.keep = true;
+  render();
+  const j = await api('/api/test', { scenario: t.name, blueprint: S.lanes, framework: S.framework, project_id: DB.projectId });
+  if (j) {
+    t.s = j.status === 'pass' ? 'pass' : 'fail';
+    t.trace = j.trace || null;
+    t.fix = j.fix || null;
+    t.fixed = null;
+  } else {
+    t.s = 'fail';
+    t.trace = [['api', 'the test server did not respond', 1]];
+  }
+  render.keep = true;
+  render();
+}
+
 /* ---------- database (Supabase). If /api/config has no keys, the app runs as a local demo. ---------- */
 const DB={on:false,sb:null,user:null,projectId:null,cap:100};
 const me=()=>DB.user?(DB.user.user_metadata&&DB.user.user_metadata.full_name)||DB.user.email:'Dinesh';
@@ -457,6 +494,11 @@ async function loadProject(){
  if(ch.data)S.changes=ch.data.map(c=>({id:+c.id,text:c.text,status:c.status}));
  if(cm.data)S.comments=cm.data.map(c=>({who:c.author_name,text:c.body,on:c.target}));
  if(ap.data)S.approval=ap.data.status;
+ const [runs,deps]=await Promise.all([
+  sb.from('test_runs').select('*').eq('project_id',id).order('id',{ascending:false}).limit(50),
+  sb.from('deployments').select('*').eq('project_id',id).order('id',{ascending:false}).limit(20)]);
+ if(runs.data&&runs.data.length)S.tests=runs.data.map(r=>({id:100000+r.id,name:r.scenario,s:r.status,trace:r.trace,fix:r.fix}));
+ if(deps.data)deps.data.forEach(d=>{S.deployments.unshift({project:p.data?p.data.name:S.project,env:d.env==='production'?'Production':'Staging',when:new Date(d.created_at).toLocaleString()});S.live[d.env]=true;S.appUrls[d.env]=d.url});
 }
 async function loadUsage(){
  if(!DB.on||!DB.user)return;
@@ -485,7 +527,7 @@ function sync(){
 function act(a,v){
  switch(a){
  case 'go':if(v==='signin'||v==='pick'||v==='tour'){S.view=v;render();window.scrollTo(0,0)}else go(v);break;
- case 'startRole':S.role=v;S.client='acme';if(v==='define'){S.dial='plain';go('home')}else if(v==='build'){S.dial='code';S.stage='test';go('project')}else{S.approval='requested';go('approvals')}break;
+ case 'startRole':if(DB.on&&DB.user){try{localStorage.setItem('pendingRole',v)}catch(e){}}S.role=v;S.client='acme';if(v==='define'){S.dial='plain';go('home')}else if(v==='build'){S.dial='code';S.stage='test';go('project')}else{S.approval='requested';go('approvals')}break;
  case 'signedIn':
   if(DB.on){if(v==='google')DB.sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}});else toast('Google and email sign-in are live. This option is shown for the design.');return}
   S.view='pick';render();break;
@@ -516,9 +558,9 @@ function act(a,v){
  case 'share':toast('Review link copied. It opens without an account.');break;
  case 'toBlueprint':S.comments.forEach((c,i)=>S.changes.push({id:Date.now()+i,text:`From ${c.who}'s comment: ${c.text}`,status:'pending'}));S.comments=[];S.stage='blueprint';render.keep=true;render();toast('Comments turned into proposed changes');break;
  case 'openT':S.open=S.open==v?null:+v;render.keep=true;render();break;
- case 'fix':{const t=S.tests.find(x=>x.id==v);t.s='fixing';render.keep=true;render();setTimeout(()=>{t.s='pass';t.fixed=t.fix;t.trace=t.trace.map(l=>[l[0],l[2]?'ok after fix':l[1]]);S.changes.push({id:Date.now(),text:t.fix,status:'kept'});findBlock('triage')&&(findBlock('triage').mod=true);render.keep=true;render();toast('Fixed and re-run. Scenario passes.');sync()},1500);break}
- case 'rerun':S.tests.forEach(t=>{if(t.s==='pass')t.s='running'});render.keep=true;render();setTimeout(()=>{S.tests.forEach(t=>{if(t.s==='running')t.s='pass'});render.keep=true;render();toast('Scenarios re-run')},1100);break;
- case 'addScn':{const el=document.getElementById('scn');const t=el.value.trim();if(!t){document.getElementById('scnErr').style.display='block';el.focus();return}const id=Date.now();S.tests.push({id,name:t,s:'running'});render.keep=true;render();setTimeout(()=>{const x=S.tests.find(y=>y.id===id);x.s='pass';render.keep=true;render()},1300);break}
+ case 'fix':{const t=S.tests.find(x=>x.id==v);if(!t)break;t.s='fixing';render.keep=true;render();(async()=>{const j=await api('/api/fix',{scenario:t.name,trace:t.trace||[],blueprint:S.lanes});if(j&&j.fix){t.fixed=j.fix;t.s='pass';t.trace=(t.trace||[]).map(l=>[l[0],l[2]?'ok after fix':l[1]]);S.changes.push({id:Date.now(),text:j.fix,status:'kept'});const tr=findBlock('triage');if(tr&&j.code_change){tr.code=j.code_change;tr.mod=true}render.keep=true;render();toast('Fix applied. Scenario passes.');sync()}else{t.s='fail';render.keep=true;render();toast((j&&j.error)||'Could not propose a fix')}})();break}
+ case 'rerun':{const list=S.tests.filter(t=>t.s!=='running');if(!list.length)break;list.forEach(t=>t.s='running');render.keep=true;render();(async()=>{for(const t of list)await runScenario(t);toast(`Scenarios re-run: ${passCount()} of ${S.tests.length} passing`)})();break}
+ case 'addScn':{const el=document.getElementById('scn');const t=el.value.trim();if(!t){document.getElementById('scnErr').style.display='block';el.focus();return}const test={id:Date.now(),name:t,s:'running'};S.tests.push(test);render.keep=true;render();runScenario(test);break}
  case 'perm':S.perms[+v].ok=true;render.keep=true;render();break;
  case 'request':S.approval='requested';render.keep=true;render();toast('Approval requested. Priya gets an email with the review link.');break;
  case 'approveIt':S.approval='approved';render.keep=true;render();toast('Approved for production');break;
@@ -528,15 +570,16 @@ function act(a,v){
   if(S.deploying)return;
   if(S.role==='define'){toast('Ask a builder on this client to deploy');return}
   if(S.env==='production'&&!(allPass()&&permsOk()&&S.approval==='approved')){toast('Production is locked until the three checks pass');return}
-  S.deploying=true;S.log=[];const env=S.env;
-  const lines=[`Building ${env} from architect/change-${14+S.changes.length}`,'Installing dependencies',`Packaging agents for ${S.framework}`,`Running ${S.tests.length} scenarios: ${passCount()} passed`,'Loading secrets for Acme Insurance',env==='production'?'Live at claims.acme.in':'Live at claims-triage.staging.acme.architect.app'];
-  let i=0;const tick=()=>{S.log.push(lines[i++]);render.keep=true;render();if(i<lines.length)setTimeout(tick,550);else{S.deploying=false;S.live[env]=true;render.keep=true;render();toast(`Deployed to ${env}`)}};tick();break}
- case 'pickRepo':S.imp={step:2,repo:v,scan:[]};render();{const L=['Cloning '+v,'Reading package.json and pyproject.toml','Found Next.js 14 in app/','Found FastAPI in api/','Found 2 CrewAI agents in agents/','Mapping entry points and tests'];let i=0;const t=()=>{S.imp.scan.push(L[i++]);render.keep=true;render();if(i<L.length)setTimeout(t,420);else setTimeout(()=>{S.imp.step=3;render.keep=true;render()},500)};t()}break;
- case 'impReset':S.imp={step:1,repo:null,scan:[]};render();break;
- case 'impOpen':S.project='Claims portal';S.framework='CrewAI';S.dial='code';S.stage='blueprint';S.lanes=seedLanes();S.lanes.forEach(l=>l.items.forEach(b=>b.code=b.code.replace(/framework="[^"]*"/,'framework="crewai"')));go('project');toast('Imported. Your agents now run on Architect.');break;
+  S.deploying=true;S.log=['Generating app from blueprint…'];render.keep=true;render();
+  (async()=>{const env=S.env;const j=await api('/api/publish',{name:S.project,env,blueprint:S.lanes,framework:S.framework,project_id:DB.projectId});
+   if(j&&j.url){S.log=j.log||[];S.live[env]=true;S.appUrls[env]=j.url;S.deployments.unshift({project:S.project,env:env==='production'?'Production':'Staging',when:'Just now'});S.deploying=false;render.keep=true;render();toast(`Deployed to ${env}`)}
+   else{S.deploying=false;S.log=['Deploy failed',(j&&j.error)||'unknown error'];render.keep=true;render()}})();break}
+ case 'scanRepo':{const el=document.getElementById('repo');const repo=(el&&el.value.trim()||'').replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'').replace(/\/+$/,'');if(!repo){el&&el.focus();toast('Enter a repo like owner/name');return}S.imp={step:2,repo,scan:[],stack:null,blueprint:null,error:null};render();(async()=>{const j=await api('/api/import',{repo});if(j&&j.blueprint){S.imp.stack=j.stack;S.imp.blueprint=j.blueprint;S.imp.step=3}else{S.imp.step=1;S.imp.error=(j&&j.error)||'Import failed'}render()})();break}
+ case 'impReset':S.imp={step:1,repo:null,scan:[],stack:null,blueprint:null,error:null};render();break;
+ case 'impOpen':{const bp=S.imp.blueprint;if(!bp)break;const kinds={screens:'Screen',agents:'Agent',data:'Table',conn:'Connection'};const seeds=seedLanes();S.lanes=seeds.map(l=>{const g=(bp.lanes||[]).find(x=>x.id===l.id);const items=(g&&Array.isArray(g.items)&&g.items.length)?g.items.slice(0,3).map((it,i)=>({id:l.id+'_'+i,kind:kinds[l.id],title:String(it.title||'Untitled'),plain:String(it.plain||''),code:String(it.code||'')})):l.items;return{...l,items}});autoLinks();if(bp.name)S.project=String(bp.name).slice(0,48);S.framework='Bring your own';S.dial='code';S.stage='blueprint';S.sel=null;S.drawn=new Map();go('project');toast('Imported. Review the blueprint, then test and ship.');break}
  case 'ctool':S.conn.tool=v;render.keep=true;render();break;
  case 'copy':toast('Copied');break;
- case 'simConn':{S.conn.state='connected';const n={claude:'Claude Code',cursor:'Cursor',codex:'Codex'}[S.conn.tool];S.conn.feed=[[`${n} signed in as Dinesh`,'pass'],[`${n} pushed agents/triage.py`,'draft']];render.keep=true;render();setTimeout(()=>{S.conn.feed.push(['Scenarios queued for the triage agent','draft']);render.keep=true;render()},900);setTimeout(()=>{S.conn.feed.push([`${passCount()} of ${S.tests.length} scenarios passed`,allPass()?'pass':'fail']);render.keep=true;render()},1900);break}
+ case 'checkMcp':{S.conn.state='waiting';render.keep=true;render();(async()=>{try{const r=await fetch('/api/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});const j=await r.json();if(j&&j.result&&Array.isArray(j.result.tools)){S.conn.state='connected';S.conn.tools=j.result.tools.map(x=>x.name);S.conn.feed=[['initialize ok — MCP protocol answering','pass'],[`tools/list: ${j.result.tools.length} tools exposed`,'pass']]}else{S.conn.state='waiting';S.conn.feed=[['endpoint did not answer MCP','fail']]}}catch(e){S.conn.state='waiting';S.conn.feed=[['endpoint unreachable','fail']]}render.keep=true;render()})();break}
  case 'tog':toast('Production rules can only be changed by an approver');break;
  case 'toast':toast(v);break;
  }

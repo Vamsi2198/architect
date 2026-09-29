@@ -15,8 +15,23 @@ try {
 
 const config = require('./api/config.js');
 const draft = require('./api/draft.js');
+const test = require('./api/test.js');
+const fix = require('./api/fix.js');
+const importer = require('./api/import.js');
+const publish = require('./api/publish.js');
+const mcp = require('./api/mcp.js');
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
+const POST_ROUTES = {
+  '/api/draft': draft,
+  '/api/test': test,
+  '/api/fix': fix,
+  '/api/import': importer,
+  '/api/publish': publish,
+  '/api/mcp': mcp
+};
+
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.md': 'text/markdown' };
+const APPS_DIR = path.join(__dirname, 'apps');
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -39,11 +54,25 @@ const server = http.createServer((req, res) => {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   const url = req.url.split('?')[0];
   if (url === '/api/config' && req.method === 'GET') return config(req, shim(res));
-  if (url === '/api/draft' && req.method === 'POST') {
+  if (POST_ROUTES[url] && req.method === 'POST') {
     let raw = '';
     req.on('data', c => (raw += c));
-    req.on('end', () => { try { req.body = JSON.parse(raw || '{}'); } catch { req.body = {}; } draft(req, shim(res)); });
+    req.on('end', () => {
+      try { req.body = JSON.parse(raw || '{}'); } catch { req.body = {}; }
+      POST_ROUTES[url](req, shim(res));
+    });
     return;
+  }
+  // Generated apps, served at /app/<slug>/
+  if (url.startsWith('/app/')) {
+    const rel = url.replace(/^\/app\//, '').replace(/\.\./g, '');
+    const file = path.join(APPS_DIR, rel === '' || rel.endsWith('/') ? path.join(rel, 'index.html') : rel);
+    if (file.startsWith(APPS_DIR) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+      res.setHeader('Content-Type', MIME[path.extname(file)] || 'application/octet-stream');
+      return fs.createReadStream(file).pipe(res);
+    }
+    res.statusCode = 404;
+    return res.end('App not found');
   }
   const file = path.join(__dirname, url === '/' ? 'index.html' : url);
   if (!file.startsWith(__dirname) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
