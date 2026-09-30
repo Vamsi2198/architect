@@ -40,6 +40,7 @@ let S={view:'tour',role:'build',client:'acme',notes:false,nav:false,dial:'plain'
  approval:'none',env:'staging',deploying:false,log:[],live:{staging:false,production:false},credits:{used:0,cap:100},
  imp:{step:1,repo:null,scan:[],stack:null,blueprint:null,error:null},conn:{tool:'claude',state:'waiting',feed:[],tools:[]},appUrls:{staging:'',production:''},deployments:[],
  pv:{device:'desktop',comment:false,pins:[]},comments:[{who:'Priya S',role:'Client lead',text:'Can we show the policy limit next to the claim amount?',on:'CLM-2041'}],
+ chat:{msgs:[],busy:false,prefill:''},gh:{connected:false,repo:'',branch:'main'},
  project:'Claims triage agent',framework:'LangGraph',prompt:'',drawn:new Map(),drawnInit:false};
 const app=document.getElementById('app');
 S.perms=permsFromBlueprint();
@@ -108,6 +109,8 @@ function shell(inner,crumb){
    ${nav('settings','Settings')}
    <div class="nav-h">Projects</div>
    <a class="${S.view==='project'?'on':''}" data-a="openProject"><span>${esc(S.project)}</span><span class="dot ${allPass()?'pass':'fail'}"></span></a>
+   ${nav('agents','Agents')}
+   ${nav('chat','Chat')}
    <div class="nav-h">Start something</div>
    ${nav('import','Import a repo')}
    ${nav('connect','Connect a coding agent')}
@@ -304,15 +307,17 @@ function deploy(){
  const ready=allPass()&&permsOk()&&S.approval==='approved';
  const blocked=S.env==='production'&&!ready;
  const who=S.role==='define';
+ const secrets=(S.lanes.find(l=>l.id==='conn')||{items:[]}).items.map(c=>c.title);
  return `${note('Staging is always open so people can try things. Production waits for passing scenarios, reviewed permissions, and sign-off.')}
  ${gate()}
  <div class="two" style="margin-top:18px"><div class="sheet" style="padding:18px">
   <h3>Where to</h3>
   <div class="tabs" style="margin-top:10px"><button class="btn sm ${S.env==='staging'?'on':''}" data-a="env" data-v="staging">Staging</button><button class="btn sm ${S.env==='production'?'on':''}" data-a="env" data-v="production">Production</button></div>
-  <div class="small"><div class="row between" style="padding:6px 0"><span class="muted">GitHub</span><span class="mono">acme-ai/claims-triage</span></div><div class="row between" style="padding:6px 0"><span class="muted">Branch</span><span class="mono">architect/change-${14+S.changes.length}</span></div><div class="row between" style="padding:6px 0"><span class="muted">Agents run on</span><span>${S.framework}, hosted by Architect</span></div><div class="row between" style="padding:6px 0"><span class="muted">Secrets</span><span>POLICY_API, GMAIL_TOKEN set</span></div></div>
+  <div class="small"><div class="row between" style="padding:6px 0"><span class="muted">GitHub</span>${S.gh.connected?`<span class="mono">${esc(S.gh.repo)}</span>`:`<span class="small muted">Not connected</span>`}</div><div class="row between" style="padding:6px 0"><span class="muted">Branch</span><span class="mono">${S.gh.connected?esc(S.gh.branch):'—'}</span></div><div class="row between" style="padding:6px 0"><span class="muted">Agents run on</span><span>${S.framework}, hosted by Architect</span></div><div class="row between" style="padding:6px 0"><span class="muted">Secrets</span><span>${secrets.length?secrets.map(esc).join(', ')+' set':'None required'}</span></div></div>
+  ${S.gh.connected?'':`<div class="row between" style="margin-top:14px;padding:10px 12px;border:1px dashed var(--rule);border-radius:10px;gap:10px;flex-wrap:wrap"><span class="small muted">Deploys push a branch and open a pull request on your repo.</span><button class="btn sm ink" data-a="ghConnect">${I.git} Connect GitHub</button></div>`}
   ${blocked?`<div class="small" style="margin-top:14px;padding:10px 12px;border-radius:8px;background:var(--amber-soft);color:var(--amber)">Production opens when the three checks above are green.</div>`:''}
   ${who?`<p class="small muted" style="margin-top:14px">Deploys are run by builders on this client. You can still share a staging link.</p>`:''}
-  <div class="row" style="margin-top:14px;flex-wrap:wrap"><button class="btn ink" data-a="deployGo">${S.deploying?'Deploying…':blocked?'Production is locked':`Deploy to ${S.env}`}</button><button class="btn" data-a="toast" data-v="Pull request opened on acme-ai/claims-triage (prototype)">Open pull request</button></div>
+  <div class="row" style="margin-top:14px;flex-wrap:wrap"><button class="btn ink" data-a="deployGo">${S.deploying?'Deploying…':blocked?'Production is locked':`Deploy to ${S.env}`}</button>${S.gh.connected?`<button class="btn" data-a="toast" data-v="Pull request opened on ${esc(S.gh.repo)} (prototype)">Open pull request</button>`:''}</div>
  </div>
  <div><div class="log" aria-live="polite">${S.log.length?S.log.map(l=>`<div>${esc(l)}</div>`).join(''):'<div style="opacity:.6">Deploy output appears here</div>'}</div>
  ${S.live.staging||S.live.production?`<div class="sheet" style="padding:14px;margin-top:12px">${S.live.staging?`<div class="row between small"><span>Staging</span><a href="${esc(S.appUrls.staging||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--draft)">${esc(S.appUrls.staging||'')}</a></div>`:''}${S.live.production?`<div class="row between small" style="margin-top:6px"><span>Production</span><a href="${esc(S.appUrls.production||'#')}" target="_blank" rel="noopener" class="mono" style="color:var(--pass)">${esc(S.appUrls.production||'')}</a></div>`:''}</div>`:''}</div></div>`}
@@ -382,6 +387,29 @@ function connectView(){
   <div class="row" style="margin-top:12px"><button class="btn sm ${S.conn.state==='connected'?'':'ink'}" data-a="checkMcp">${S.conn.state==='connected'?'Check again':'Test connection'}</button>${S.conn.state==='connected'?`<button class="btn sm" data-a="openStage" data-v="test">See test results</button>`:''}</div>
  </div></div>`}
 
+/* ---------- chat & agents ---------- */
+function chat(){
+ const c=S.chat;
+ return `<h1>Chat with the Architect</h1>
+ <p class="muted" style="margin-top:6px">Plan ${esc(S.project)} out loud. The Architect reads the blueprint and answers against it.</p>
+ ${note('The chat plans with you and can change the blueprint. Anything it changes lands there as a proposal you keep or undo.')}
+ <div class="chat-wrap sheet" style="margin-top:18px">
+  <div class="chat-list" id="chatList">${c.msgs.length?c.msgs.map(m=>`<div class="msg ${m.who==='user'?'u':'a'}"><div class="b">${esc(m.text)}</div></div>`).join(''):`<div class="chat-empty"><p class="small muted">No messages yet. Start with one of these:</p><div class="sugs" style="justify-content:center">${['What should I build first?','Review my blueprint','How do I deploy this?'].map(s=>`<button class="btn sm" data-a="chip" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`}${c.busy?`<div class="msg a"><div class="b"><span class="pulse">Thinking…</span></div></div>`:''}</div>
+  <div class="chat-bar"><input class="input" id="chatIn" placeholder="Ask about ${esc(S.project)}…" value="${esc(c.prefill||'')}" aria-label="Message the Architect"><button class="btn ink" data-a="chatSend" aria-label="Send">${I.send}</button></div>
+ </div>`}
+function agents(){
+ const lane=S.lanes.find(l=>l.id==='agents')||{items:[]};
+ const model=({claude:'Claude',cursor:'Cursor',codex:'Codex'})[S.conn.tool]||'Claude';
+ return `<div class="row between" style="flex-wrap:wrap;gap:10px"><div><h1>Agents</h1><p class="muted" style="margin-top:6px">The agents ${esc(S.project)} runs, straight from the blueprint.</p></div><button class="btn ink" data-a="askAgent">Ask Architect for another agent</button></div>
+ ${note('Agents are defined in the blueprint and tested in the Test stage. Use the buttons on each card to try one or take it out.')}
+ <div class="list" style="margin-top:18px">${lane.items.length?lane.items.map(b=>{const tools=edges().filter(e=>e[0]===b.id).map(e=>e[2]);return `<div class="item" style="align-items:flex-start"><div style="flex:1;min-width:0">
+  <div class="row" style="flex-wrap:wrap"><span style="font-weight:600">${esc(b.title)}</span><span class="chip">${model}</span></div>
+  <p class="small muted" style="margin-top:6px">${esc(b.plain)}</p>
+  <pre class="codebox" style="margin-top:8px">${esc(b.code)}</pre>
+  <div class="small" style="margin-top:8px"><span class="muted">Tools:</span> ${tools.length?esc(tools.join(', ')):'No tools connected'}</div>
+  <div class="row" style="margin-top:10px"><button class="btn sm" data-a="openStage" data-v="test">Test</button><button class="btn sm" data-a="rmAgent" data-v="${esc(b.id)}">Remove</button></div>
+ </div></div>`}).join(''):`<div class="item"><span class="small muted">No agents in the blueprint yet.</span></div>`}</div>`}
+
 /* ---------- render ---------- */
 function render(){
  const v=S.view;
@@ -389,7 +417,7 @@ function render(){
  if(v==='signin'){app.innerHTML=signin();return}
  if(v==='pick'){app.innerHTML=`<div class="${S.notes?'notes-on':''}" style="height:100%">${pick()}</div>`;return}
  const c=CLIENTS[S.client].name;
- const map={home:[home,`<b>Home</b>`],project:[project,`${c} / <b>${esc(S.project)}</b>`],approvals:[approvals,'<b>Approvals</b>'],deploys:[deploys,'<b>Deployments</b>'],settings:[settings,'<b>Settings</b>'],import:[importView,'<b>Import a repo</b>'],connect:[connectView,'<b>Connect a coding agent</b>']};
+ const map={home:[home,`<b>Home</b>`],project:[project,`${c} / <b>${esc(S.project)}</b>`],approvals:[approvals,'<b>Approvals</b>'],deploys:[deploys,'<b>Deployments</b>'],settings:[settings,'<b>Settings</b>'],import:[importView,'<b>Import a repo</b>'],connect:[connectView,'<b>Connect a coding agent</b>'],chat:[chat,'<b>Chat</b>'],agents:[agents,'<b>Agents</b>']};
  const [fn,crumb]=map[v];
  const scroller=document.querySelector('.main');const y=scroller?scroller.scrollTop:0;
  app.innerHTML=shell(fn(),crumb);
@@ -401,6 +429,8 @@ function render(){
  const pr=document.getElementById('prompt');if(pr)pr.oninput=e=>{S.prompt=e.target.value};
  const scn=document.getElementById('scn');if(scn){scn.onkeydown=e=>{if(e.key==='Enter')act('addScn')};scn.oninput=()=>{document.getElementById('scnErr').style.display='none'}}
  const rp=document.getElementById('repo');if(rp)rp.onkeydown=e=>{if(e.key==='Enter')act('scanRepo')};
+ const ci=document.getElementById('chatIn');if(ci){ci.onkeydown=e=>{if(e.key==='Enter')act('chatSend')};if(S.chat.prefill){ci.focus();ci.setSelectionRange(ci.value.length,ci.value.length);S.chat.prefill=''}}
+ const cl=document.getElementById('chatList');if(cl)cl.scrollTop=cl.scrollHeight;
 }
 function go(v){S.view=v;S.nav=false;render();const m=document.querySelector('.main');if(m)m.scrollTop=0;window.scrollTo(0,0)}
 
@@ -622,6 +652,11 @@ function act(a,v){
  case 'copy':toast('Copied');break;
  case 'checkMcp':{S.conn.state='waiting';render.keep=true;render();(async()=>{try{const r=await fetch('/api/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});const j=await r.json();if(j&&j.result&&Array.isArray(j.result.tools)){S.conn.state='connected';S.conn.tools=j.result.tools.map(x=>x.name);S.conn.feed=[['initialize ok — MCP protocol answering','pass'],[`tools/list: ${j.result.tools.length} tools exposed`,'pass']]}else{S.conn.state='waiting';S.conn.feed=[['endpoint did not answer MCP','fail']]}}catch(e){S.conn.state='waiting';S.conn.feed=[['endpoint unreachable','fail']]}render.keep=true;render()})();break}
  case 'tog':toast('Production rules can only be changed by an approver');break;
+ case 'chatSend':{const el=document.getElementById('chatIn');const t=(el&&el.value||'').trim();if(!t){el&&el.focus();return}S.chat.prefill='';S.chat.msgs.push({who:'user',text:t});S.chat.busy=true;render.keep=true;render();(async()=>{const j=await api('/api/chat',{message:t,blueprint:S.lanes,history:S.chat.msgs.slice(-10)},true);S.chat.busy=false;if(j&&typeof j.reply==='string')S.chat.msgs.push({who:'architect',text:j.reply});else toast('Chat failed');render.keep=true;render()})();break}
+ case 'chip':{const el=document.getElementById('chatIn');if(el){el.value=v;el.focus()}break}
+ case 'askAgent':S.chat.prefill=`Add another agent to ${S.project} — what would you suggest?`;go('chat');break;
+ case 'rmAgent':{const l=S.lanes.find(x=>x.id==='agents');if(!l)break;l.items=l.items.filter(b=>b.id!==v);if(S.sel===v)S.sel=null;S.perms=permsFromBlueprint();render.keep=true;render();toast('Agent removed from the blueprint');break}
+ case 'ghConnect':S.gh.connected=true;S.gh.repo=(S.project.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''))||'my-app';render.keep=true;render();toast('GitHub connected (prototype)');break;
  case 'toast':toast(v);break;
  }
  sync();
