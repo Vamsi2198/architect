@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="640" viewBox="0 0 1180 640" font-family="Segoe UI, Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1d4ed8"/>
+    </marker>
+    <style>
+      .step  { fill:#eff6ff; stroke:#1d4ed8; stroke-width:1.6; rx:12; }
+      .alt   { fill:#f0fdf4; stroke:#16a34a; stroke-width:1.6; rx:12; }
+      .warn  { fill:#fffbeb; stroke:#d97706; stroke-width:1.6; rx:12; }
+      .num   { fill:#1d4ed8; font-size:20px; font-weight:800; }
+      .t     { fill:#0f172a; font-size:15px; font-weight:700; }
+      .d     { fill:#475569; font-size:12px; }
+      .arr   { stroke:#1d4ed8; stroke-width:2; fill:none; marker-end:url(#a2); }
+      .lbl   { fill:#1d4ed8; font-size:11.5px; }
+    </style>
+  </defs>
+
+  <rect width="1180" height="640" fill="#ffffff"/>
+  <text x="40" y="44" style="font-size:22px;font-weight:800;fill:#0f172a">How Architect works — a 6-step tour</text>
+  <text x="40" y="68" class="d">Describe your idea → Architect designs, tests and ships it. You stay in charge at every step.</text>
+
+  <!-- Row 1: 1,2,3 -->
+  <rect x="40"  y="110" width="330" height="120" class="step"/>
+  <text x="60" y="146" class="num">1</text><text x="88" y="146" class="t">Describe your app</text>
+  <text x="60" y="172" class="d">Type one plain sentence, e.g.</text>
+  <text x="60" y="190" class="d">"A todo app with tasks, due dates</text>
+  <text x="60" y="206" class="d">and filters."</text>
+
+  <rect x="425" y="110" width="330" height="120" class="step"/>
+  <text x="445" y="146" class="num">2</text><text x="473" y="146" class="t">Review the blueprint</text>
+  <text x="445" y="172" class="d">Watch the app design draw itself:</text>
+  <text x="445" y="190" class="d">screens, agents, data tables,</text>
+  <text x="445" y="206" class="d">connections. Flip Plain ↔ Code.</text>
+
+  <rect x="810" y="110" width="330" height="120" class="alt"/>
+  <text x="830" y="146" class="num" style="fill:#16a34a">3</text><text x="858" y="146" class="t">Chat &amp; refine (optional)</text>
+  <text x="830" y="172" class="d">Ask questions in Chat, or click</text>
+  <text x="830" y="190" class="d">Agents to inspect each agent's</text>
+  <text x="830" y="206" class="d">tools. Nothing is set in stone.</text>
+
+  <!-- arrows row 1 -->
+  <path class="arr" d="M 370 170 L 417 170"/>
+  <path class="arr" d="M 755 170 L 802 170"/>
+
+  <!-- Row 2: 4,5,6 -->
+  <rect x="810" y="300" width="330" height="130" class="step"/>
+  <text x="830" y="336" class="num">4</text><text x="858" y="336" class="t">Preview &amp; comment</text>
+  <text x="830" y="362" class="d">See the app with your data, on</text>
+  <text x="830" y="380" class="d">desktop or phone. Click any row</text>
+  <text x="830" y="396" class="d">and leave a comment — reviewers</text>
+  <text x="830" y="412" class="d">don't need an account.</text>
+
+  <rect x="425" y="300" width="330" height="130" class="step"/>
+  <text x="445" y="336" class="num">5</text><text x="473" y="336" class="t">Test like a QA team</text>
+  <text x="445" y="362" class="d">Run real scenarios written for</text>
+  <text x="445" y="380" class="d">YOUR app. If one fails, click</text>
+  <text x="445" y="396" class="d">"Ask Architect to fix this".</text>
+  <text x="445" y="414" class="d">Review what agents may touch.</text>
+
+  <rect x="40" y="300" width="330" height="130" class="warn"/>
+  <text x="60" y="336" class="num" style="fill:#d97706">6</text><text x="88" y="336" class="t">Approve &amp; deploy</text>
+  <text x="60" y="362" class="d">Staging is one click — share the</text>
+  <text x="60" y="380" class="d">link instantly. Production waits</text>
+  <text x="60" y="396" class="d">for green tests + your sign-off.</text>
+
+  <!-- arrows row 2 (right to left flow) -->
+  <path class="arr" d="M 802 365 L 755 365"/>
+  <path class="arr" d="M 417 365 L 370 365"/>
+  <path class="arr" d="M 975 230 L 975 292"/>
+  <text x="990" y="266" class="lbl">happy with it?</text>
+
+  <!-- outcome band -->
+  <rect x="40" y="480" width="1100" height="110" style="fill:#f0fdf4;stroke:#16a34a;stroke-width:1.6;rx:12"/>
+  <text x="64" y="516" style="fill:#15803d;font-size:16px;font-weight:800">✓ Your app is live</text>
+  <text x="64" y="542" class="d">A real, working app opens from a link — staging first, production after sign-off. Every deploy is</text>
+  <text x="64" y="560" class="d">reversible, every agent action is permissioned, and you can keep changing it by simply describing</text>
+  <text x="64" y="578" class="d">what you want next.</text>
+  <path class="arr" d="M 205 430 C 205 460 205 460 205 474"/>
+</svg>
