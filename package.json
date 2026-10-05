@@ -2,9 +2,22 @@
   "name": "architect-2",
   "private": true,
   "description": "Architect 2.0 prototype: one HTML page, two serverless functions, Supabase for auth and data.",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node dev-server.js",
-    "dev": "node dev-server.js"
+    "dev": "node dev-server.js",
+    "test:e2e": "node scripts/e2e.js",
+    "docs:shots": "node scripts/capture.js",
+    "docs:build": "python scripts/make_doc.py"
+  },
+  "version": "1.0.0",
+  "main": "app.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "puppeteer-core": "^21.11.0"
   }
 }

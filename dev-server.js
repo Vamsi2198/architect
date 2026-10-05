@@ -42,6 +42,9 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Content-Security-Policy': "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 };
+// Generated apps are single self-contained HTML files with inline JS/CSS,
+// so the strict platform CSP would break them. They get their own relaxed CSP.
+const APP_CSP = "default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; connect-src 'self' data:";
 
 function shim(res) {
   res.status = c => { res.statusCode = c; return res; };
@@ -73,6 +76,7 @@ const server = http.createServer((req, res) => {
     const file = path.join(APPS_DIR, rel === '' || rel.endsWith('/') ? path.join(rel, 'index.html') : rel);
     if (file.startsWith(APPS_DIR) && fs.existsSync(file) && fs.statSync(file).isFile()) {
       res.setHeader('Content-Type', MIME[path.extname(file)] || 'application/octet-stream');
+      if (path.extname(file) === '.html') res.setHeader('Content-Security-Policy', APP_CSP);
       return fs.createReadStream(file).pipe(res);
     }
     res.statusCode = 404;
